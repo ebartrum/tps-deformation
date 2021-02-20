@@ -1,41 +1,40 @@
 import numpy
+import torch
 
 __all__ = ['find_coefficients', 'transform']
 
 
-def cdist(K: numpy.ndarray, B: numpy.ndarray) -> numpy.ndarray:
+def cdist(K: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
     """Calculate Euclidean distance between K[i, :] and B[j, :].
 
     Arguments
     ---------
-        K : numpy.array
-        B : numpy.array
+        K : torch.Tensor
+        B : torch.Tensor
     """
-    K = numpy.atleast_2d(K)
-    B = numpy.atleast_2d(B)
     assert K.ndim == 2
     assert B.ndim == 2
 
-    K = numpy.expand_dims(K, 1)
-    B = numpy.expand_dims(B, 0)
+    K = K.unsqueeze(1)
+    B = B.unsqueeze(0)
     D = K - B
-    return numpy.linalg.norm(D, axis=2)
+    return torch.norm(D, dim=2)
 
 
-def pairwise_radial_basis(K: numpy.ndarray, B: numpy.ndarray) -> numpy.ndarray:
+def pairwise_radial_basis(K: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
     """Compute the TPS radial basis function phi(r) between every row-pair of K
     and B where r is the Euclidean distance.
 
     Arguments
     ---------
-        K : numpy.array
+        K : torch.Tensor
             n by d vector containing n d-dimensional points.
-        B : numpy.array
+        B : torch.Tensor
             m by d vector containing m d-dimensional points.
 
     Return
     ------
-        P : numpy.array
+        P : torch.Tensor
             n by m matrix where.
             P(i, j) = phi( norm( K(i,:) - B(j,:) ) ),
             where phi(r) = r^2*log(r), if r >= 1
@@ -50,25 +49,25 @@ def pairwise_radial_basis(K: numpy.ndarray, B: numpy.ndarray) -> numpy.ndarray:
     r_mat_p2 = r_mat[pwise_cond_ind2]
 
     # P correcponds to the matrix K from [1].
-    P = numpy.empty(r_mat.shape)
-    P[pwise_cond_ind1] = (r_mat_p1**2) * numpy.log(r_mat_p1)
-    P[pwise_cond_ind2] = r_mat_p2 * numpy.log(numpy.power(r_mat_p2, r_mat_p2))
+    P = torch.zeros(r_mat.shape, dtype=torch.float64)
+    P[pwise_cond_ind1] = (r_mat_p1**2) * torch.log(r_mat_p1)
+    P[pwise_cond_ind2] = r_mat_p2 * torch.log(torch.pow(r_mat_p2, r_mat_p2))
 
     return P
 
 
-def find_coefficients(control_points: numpy.ndarray,
-                      target_points: numpy.ndarray,
+def find_coefficients(control_points: torch.Tensor,
+                      target_points: torch.Tensor,
                       lambda_: float = 0.,
-                      solver: str = 'exact') -> numpy.ndarray:
+                      solver: str = 'exact') -> torch.Tensor:
     """Given a set of control points and their corresponding points, compute the
     coefficients of the TPS interpolant deforming surface.
 
     Arguments
     ---------
-        control_points : numpy.array
+        control_points : torch.Tensor
             p by d vector of control points
-        target_points : numpy.array
+        target_points : torch.Tensor
             p by d vector of corresponding target points on the deformed
             surface
         lambda_ : float
@@ -79,7 +78,7 @@ def find_coefficients(control_points: numpy.ndarray,
 
     Return
     ------
-        coef : numpy.ndarray
+        coef : torch.Tensor
             the coefficients
 
     .. seealso::
@@ -87,8 +86,6 @@ def find_coefficients(control_points: numpy.ndarray,
         http://cseweb.ucsd.edu/~sjb/pami_tps.pdf
     """
     # ensure data type and shape
-    control_points = numpy.atleast_2d(control_points)
-    target_points = numpy.atleast_2d(target_points)
     if control_points.shape != target_points.shape:
         raise ValueError(
             'Shape of and control points {cp} and target points {tp} are not the same.'.
@@ -98,53 +95,49 @@ def find_coefficients(control_points: numpy.ndarray,
 
     # The matrix
     K = pairwise_radial_basis(control_points, control_points)
-    P = numpy.hstack([numpy.ones((p, 1)), control_points])
+    P = torch.cat([torch.ones((p, 1)), control_points], dim=1)
 
     # Relax the exact interpolation requirement by means of regularization.
-    K = K + lambda_ * numpy.identity(p)
+    K = K + lambda_ * torch.eye(p)
 
     # Target points
-    M = numpy.vstack([
-        numpy.hstack([K, P]),
-        numpy.hstack([P.T, numpy.zeros((d + 1, d + 1))])
+    M = torch.cat([
+        torch.cat([K, P], dim=1),
+        torch.cat([P.T, torch.zeros((d + 1, d + 1))], dim=1)
     ])
-    Y = numpy.vstack([target_points, numpy.zeros((d + 1, d))])
+    Y = torch.cat([target_points, torch.zeros((d + 1, d))])
 
     # solve for M*X = Y.
     # At least d+1 control points should not be in a subspace; e.g. for d=2, at
     # least 3 points are not on a straight line. Otherwise M will be singular.
     solver = solver.lower()
     if solver == 'exact':
-        X = numpy.linalg.solve(M, Y)
-    elif solver == 'lstsq':
-        X, _, _, _ = numpy.linalg.lstsq(M, Y, None)
+        X, _ = torch.solve(Y,M)
     else:
         raise ValueError('Unknown solver: ' + solver)
 
     return X
 
 
-def transform(source_points: numpy.ndarray, control_points: numpy.ndarray,
-              coefficient: numpy.ndarray) -> numpy.ndarray:
+def transform(source_points: torch.Tensor, control_points: torch.Tensor,
+              coefficient: torch.Tensor) -> torch.Tensor:
     """Transform the source points form the original surface to the destination
     (deformed) surface.
 
     Arguments
     ---------
-        source_points : numpy.array
+        source_points : torch.Tensor
             n by d array of source points to be transformed
-        control_points : numpy.array
+        control_points : torch.Tensor
             the control points used in the function `find_coefficients`
-        coefficient : numpy.array
+        coefficient : torch.Tensor
             the computed coefficients
 
     Return
     ------
-        deformed_points : numpy.array
+        deformed_points : torch.Tensor
             n by d array of the transformed point on the target surface
     """
-    source_points = numpy.atleast_2d(source_points)
-    control_points = numpy.atleast_2d(control_points)
     if source_points.shape[-1] != control_points.shape[-1]:
         raise ValueError(
             'Dimension of source points ({sd}D) and control points ({cd}D) are not the same.'.
@@ -153,7 +146,7 @@ def transform(source_points: numpy.ndarray, control_points: numpy.ndarray,
     n = source_points.shape[0]
 
     A = pairwise_radial_basis(source_points, control_points)
-    K = numpy.hstack([A, numpy.ones((n, 1)), source_points])
+    K = torch.cat([A, torch.ones((n, 1)), source_points], dim=1)
 
-    deformed_points = numpy.dot(K, coefficient)
+    deformed_points = K@coefficient
     return deformed_points
