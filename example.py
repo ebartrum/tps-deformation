@@ -22,7 +22,7 @@ trans = tps.TPS(deform_xy, source_xy)
 
 # make other points a left-bottom to upper-right line on source surface
 samp2 = torch.from_numpy(np.linspace(-1.8, 1.8, 10)).cuda()
-test_xy = torch.from_numpy(np.tile(samp2, [2, 1]).T).cuda()
+test_xy = torch.from_numpy(np.tile(samp2.cpu().numpy(), [2, 1]).T).cuda()
 
 # get transformed points
 test_xy = torch.stack(2*[test_xy])

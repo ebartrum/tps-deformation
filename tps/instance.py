@@ -1,4 +1,5 @@
 import numpy
+import torch
 
 from . import functions
 
@@ -10,8 +11,8 @@ class TPS:
     """
 
     def __init__(self,
-                 control_points: numpy.ndarray,
-                 target_points: numpy.ndarray,
+                 control_points: torch.Tensor,
+                 target_points: torch.Tensor,
                  lambda_: float = 0.,
                  solver: str = 'exact'):
         """Create a instance that preserve the TPS coefficients.
