@@ -12,13 +12,14 @@ def cdist(K: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
         K : torch.Tensor
         B : torch.Tensor
     """
-    assert K.ndim == 2
-    assert B.ndim == 2
+    assert K.ndim == 3
+    assert B.ndim == 3
 
-    K = K.unsqueeze(1)
-    B = B.unsqueeze(0)
+
+    K = K.unsqueeze(2)
+    B = B.unsqueeze(1)
     D = K - B
-    return torch.norm(D, dim=2)
+    return torch.norm(D, dim=3)
 
 
 def pairwise_radial_basis(K: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
@@ -91,21 +92,21 @@ def find_coefficients(control_points: torch.Tensor,
             'Shape of and control points {cp} and target points {tp} are not the same.'.
             format(cp=control_points.shape, tp=target_points.shape))
 
-    p, d = control_points.shape
+    bs, p, d = control_points.shape
 
     # The matrix
     K = pairwise_radial_basis(control_points, control_points)
-    P = torch.cat([torch.ones((p, 1)), control_points], dim=1)
+    P = torch.cat([torch.ones((bs, p, 1)), control_points], dim=2)
 
     # Relax the exact interpolation requirement by means of regularization.
     K = K + lambda_ * torch.eye(p)
 
     # Target points
     M = torch.cat([
-        torch.cat([K, P], dim=1),
-        torch.cat([P.T, torch.zeros((d + 1, d + 1))], dim=1)
-    ])
-    Y = torch.cat([target_points, torch.zeros((d + 1, d))])
+        torch.cat([K, P], dim=2),
+        torch.cat([P.permute(0,2,1), torch.zeros((bs, d + 1, d + 1))], dim=2)
+    ], dim=1)
+    Y = torch.cat([target_points, torch.zeros((bs, d + 1, d))], dim=1)
 
     # solve for M*X = Y.
     # At least d+1 control points should not be in a subspace; e.g. for d=2, at
@@ -143,10 +144,10 @@ def transform(source_points: torch.Tensor, control_points: torch.Tensor,
             'Dimension of source points ({sd}D) and control points ({cd}D) are not the same.'.
             format(sd=source_points.shape[-1], cd=control_points.shape[-1]))
 
-    n = source_points.shape[0]
+    bs, n = source_points.shape[:2]
 
     A = pairwise_radial_basis(source_points, control_points)
-    K = torch.cat([A, torch.ones((n, 1)), source_points], dim=1)
+    K = torch.cat([A, torch.ones((bs, n, 1)), source_points], dim=2)
 
     deformed_points = K@coefficient
     return deformed_points
