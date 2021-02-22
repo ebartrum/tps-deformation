@@ -96,7 +96,7 @@ def find_coefficients(control_points: torch.Tensor,
 
     # The matrix
     K = pairwise_radial_basis(control_points, control_points)
-    P = torch.cat([torch.ones((bs, p, 1), device=K.device), control_points], dim=2)
+    P = torch.cat([torch.ones((bs, p, 1), device=K.device, requires_grad=True), control_points], dim=2)
 
     # Relax the exact interpolation requirement by means of regularization.
     K = K + lambda_ * torch.eye(p, device=K.device)
@@ -104,9 +104,9 @@ def find_coefficients(control_points: torch.Tensor,
     # Target points
     M = torch.cat([
         torch.cat([K, P], dim=2),
-        torch.cat([P.permute(0,2,1), torch.zeros((bs, d + 1, d + 1), device=K.device)], dim=2)
+        torch.cat([P.permute(0,2,1), torch.zeros((bs, d + 1, d + 1), device=K.device, requires_grad=True)], dim=2)
     ], dim=1)
-    Y = torch.cat([target_points, torch.zeros((bs, d + 1, d), device=K.device)], dim=1)
+    Y = torch.cat([target_points, torch.zeros((bs, d + 1, d), device=K.device, requires_grad=True)], dim=1)
 
     # solve for M*X = Y.
     # At least d+1 control points should not be in a subspace; e.g. for d=2, at
@@ -114,6 +114,7 @@ def find_coefficients(control_points: torch.Tensor,
     solver = solver.lower()
     if solver == 'exact':
         X, _ = torch.solve(Y,M)
+
     else:
         raise ValueError('Unknown solver: ' + solver)
 
@@ -147,7 +148,8 @@ def transform(source_points: torch.Tensor, control_points: torch.Tensor,
     bs, n = source_points.shape[:2]
 
     A = pairwise_radial_basis(source_points, control_points)
-    K = torch.cat([A, torch.ones((bs, n, 1), device=A.device), source_points], dim=2)
+    K = torch.cat([A, torch.ones((bs, n, 1),
+        device=A.device, requires_grad=True), source_points], dim=2)
 
     deformed_points = K@coefficient
     return deformed_points

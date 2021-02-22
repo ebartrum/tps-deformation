@@ -1,49 +1,30 @@
 import numpy
 import torch
+from torch.nn import Parameter
+import meshzoo
 
 from . import functions
 
 __all__ = ['TPS']
 
 
-class TPS:
+class TPS(torch.nn.Module):
     """The thin plate spline deformation warpping.
     """
 
-    def __init__(self,
-                 control_points: torch.Tensor,
-                 target_points: torch.Tensor,
-                 lambda_: float = 0.,
-                 solver: str = 'exact'):
-        """Create a instance that preserve the TPS coefficients.
+    def __init__(self, resolution, lambda_=0):
+        super().__init__()
 
-        Arguments
-        ---------
-            control_points : numpy.array
-                p by d vector of control points
-            target_points : numpy.array
-                p by d vector of corresponding target points on the deformed
-                surface
-            lambda_ : float
-                regularization parameter
-            solver : str
-                the solver to get the coefficients. default is 'exact' for the
-                exact solution. Or use 'lstsq' for the least square solution.
-        """
-        self.control_points = control_points
-        self.coefficient = functions.find_coefficients(
-            control_points, target_points, lambda_, solver)
+        points, faces = meshzoo.uv_sphere(num_points_per_circle=resolution,
+            num_circles=resolution+2, radius=1.0)
+        self.sphere_points = torch.from_numpy(points).cuda()
+        self.points = Parameter(torch.from_numpy(points).cuda())
+        self.lambda_ = lambda_
+        self.solver = "exact"
 
-    def __call__(self, source_points):
-        """Transform the source points form the original surface to the
-        destination (deformed) surface.
-
-        Arguments
-        ---------
-            source_points : numpy.array
-                n by d array of source points to be transformed
-        """
-        return functions.transform(source_points, self.control_points,
-                                   self.coefficient)
-
-    transform = __call__
+    def forward(self, source_points):
+        coefficient = functions.find_coefficients(
+            self.points.unsqueeze(0), self.sphere_points.unsqueeze(0),
+            self.lambda_, self.solver)
+        return functions.transform(source_points,
+                self.points.unsqueeze(0), coefficient)
