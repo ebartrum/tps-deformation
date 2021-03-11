@@ -50,7 +50,7 @@ def pairwise_radial_basis(K: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
     r_mat_p2 = r_mat[pwise_cond_ind2]
 
     # P correcponds to the matrix K from [1].
-    P = torch.zeros(r_mat.shape, dtype=torch.float64, device=K.device)
+    P = torch.zeros(r_mat.shape, dtype=torch.float32, device=K.device)
     P[pwise_cond_ind1] = (r_mat_p1**2) * torch.log(r_mat_p1)
     P[pwise_cond_ind2] = r_mat_p2 * torch.log(torch.pow(r_mat_p2, r_mat_p2))
 
