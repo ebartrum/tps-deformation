@@ -9,7 +9,7 @@ __all__ = ['TPS']
 
 
 class TPS(torch.nn.Module):
-    """The thin plate spline deformation warpping.
+    """The thin plate spline deformation warping.
     """
 
     def __init__(self, resolution, lambda_=0):
